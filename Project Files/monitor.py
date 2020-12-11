@@ -1,12 +1,9 @@
 import serial 
 
-baud_rate = 9600
-com_port1 = 'ACPI\PNP0501\0'
+serialport = serial.Serial("/dev/ttyACM1", 9600, timeout=0.5)
 
-listener = serial.Serial(com_port1, baud_rate)
+serialport.write(b'a')
 
-while 1:
-    serial_out = listener.read(size=1)
-    print(serial_out)
-
-
+while True: 
+    command = serialport.read()
+    print(command.decode('ascii'))
