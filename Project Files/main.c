@@ -32,12 +32,11 @@
 *
 ******************************************************************************
 *
-* SYSC 3310 Project main.c
+* MSP432 empty main.c template
 *
 ******************************************************************************/
 
 #include "msp.h"
-#include <stdio.h>
 
 #define BUTTON_ADDRESS 0x12
 #define STATE0 0
@@ -46,12 +45,37 @@
 #define STATE3 3
 #define DEBOUNCE_TIME 100000
 
+static void fwd(void);
+static void bwd(void);
+
+void PORT1_IRQHandler(void);
  //governs our LED logic
 volatile uint8_t state;
 
 int main(void)
 {
     WDT_A->CTL = WDT_A_CTL_PW | WDT_A_CTL_HOLD; //Disable watchdog timer
+
+    CS->KEY = CS_KEY_VAL;
+    CS->CTL0 = 0;
+    CS->CTL0 = CS_CTL0_DCORSEL_3;
+    CS->CTL1 = CS_CTL1_SELA_2 | CS_CTL1_SELS_3 | CS_CTL1_SELM_3;
+    CS->KEY = 0;
+
+    P1->SEL0 |= BIT2 | BIT3;
+
+    EUSCI_A0->CTLW0 |= EUSCI_A_CTLW0_SWRST;
+    EUSCI_A0->CTLW0 = EUSCI_A_CTLW0_SWRST;
+    EUSCI_B_CTLW0_SSEL__SMCLK;
+    EUSCI_A0->BRW = 78;
+    EUSCI_A0->MCTLW = (2 << EUSCI_A_MCTLW_BRF_OFS) | EUSCI_A_MCTLW_OS16;
+    EUSCI_A0->CTLW0 &= ~EUSCI_A_CTLW0_SWRST;
+    EUSCI_A0->IFG &= ~EUSCI_A_IFG_RXIFG;
+    EUSCI_A0->IE |= EUSCI_A_IE_RXIE;
+
+    SCB->SCR |= SCB_SCR_SLEEPONEXIT_Msk;
+
+    __enable_irq();
 
     //GPIO config to set P1.1 (L) and P1.4 (R) as inputs
     P1->SEL0 &= (uint8_t)(~((1 << 4) | (1 << 1) | (1<<0)));
@@ -67,6 +91,7 @@ int main(void)
     NVIC_SetPriority(PORT1_IRQn, 2);
     NVIC_ClearPendingIRQ(PORT1_IRQn);
     NVIC_EnableIRQ(PORT1_IRQn);
+    NVIC->ISER[0] = 1 << ((EUSCIA0_IRQn) & 31);
 
     //initialize our 2 LED's
     P1->SEL0 &= (uint8_t)(~((1 << 0)));
@@ -94,77 +119,101 @@ int main(void)
 void PORT1_IRQHandler(void)
 {
 
-
-
     if(P1->IFG & (1<<4)){
 
-        if(state==STATE0){
-
-            P1->OUT &= (uint8_t)(~(1<<0));
-            P2->OUT |= (uint8_t)(1<<2);
-            state=STATE1;
-            printf("%d",state);
-
-        }else if(state == STATE1){
-
-            P1->OUT |= (uint8_t)(1<<0);
-            P2->OUT &= (uint8_t)(~(1<<2));
-            state=STATE2;
-            printf("%d",state);
-        }else if(state==STATE2){
-
-            P1->OUT |= (uint8_t)(1<<0);
-            P2->OUT |= (uint8_t)(1<<2);
-            state=STATE3;
-            printf("%d",state);
-        }else{
-
-            P1->OUT &= (uint8_t)(~(1<<0));
-            P2->OUT &= (uint8_t)(~(1<<2));
-            state=STATE0;
-            printf("%d",state);
-        }
-
+        fwd();
         P1->IFG &= ~(1<<4);
 
     }
 
+
+
     if(P1->IFG & (1<<1)){
 
-        if(state==STATE0){
-
-            P1->OUT |= (uint8_t)(1<<0);
-            P2->OUT |= (uint8_t)(1<<2);
-            state=STATE3;
-            printf("%d",state);
-        }else if(state == STATE3){
-
-            P1->OUT |= (uint8_t)(1<<0);
-            P2->OUT &= (uint8_t)(~(1<<2));
-            state=STATE2;
-            printf("%d",state);
-        }else if(state==STATE2){
-
-            P1->OUT &= (uint8_t)(~(1<<0));
-            P2->OUT |= (uint8_t)(1<<2);
-            state=STATE1;
-            printf("%d",state);
-        }else if(state==STATE1){
-
-            P1->OUT &= (uint8_t)(~(1<<0));
-            P2->OUT &= (uint8_t)(~(1<<2));
-            state=STATE0;
-            printf("%d",state);
-        }
-
+        bwd();
         P1->IFG &= ~(1<<1);
 
+    }
 
+
+
+}
+
+void EUSCIA0_IRQHandler(void)
+{
+    if (EUSCI_A0->IFG & EUSCI_A_IFG_RXIFG)
+    {
+        // Check if the TX buffer is empty first
+        while(!(EUSCI_A0->IFG & EUSCI_A_IFG_TXIFG));
+
+        // Echo the received character back
+        EUSCI_A0->TXBUF = EUSCI_A0->RXBUF;
     }
 }
 
+static void fwd(void)
+{
+
+    if(state==STATE0){
+
+        P1->OUT &= (uint8_t)(~(1<<0));
+        P2->OUT |= (uint8_t)(1<<2);
+        state=STATE1;
+
+    }else if(state==STATE1){
+
+        P1->OUT |= (uint8_t)(1<<0);
+        P2->OUT &= (uint8_t)(~(1<<2));
+        state=STATE2;
+
+    }else if(state==STATE2){
+
+        P1->OUT |= (uint8_t)(1<<0);
+        P2->OUT |= (uint8_t)(1<<2);
+        state=STATE3;
+
+    }else{
+
+        P1->OUT &= (uint8_t)(~(1<<0));
+        P2->OUT &= (uint8_t)(~(1<<2));
+        state=STATE0;
+
+    }
 
 
+}
+
+static void bwd(void)
+{
+
+    if(state==STATE0){
+
+        P1->OUT |= (uint8_t)(1<<0);
+        P2->OUT |= (uint8_t)(1<<2);
+        state=STATE3;
+
+    }else if(state == STATE3){
+
+        P1->OUT |= (uint8_t)(1<<0);
+        P2->OUT &= (uint8_t)(~(1<<2));
+        state=STATE2;
+
+    }else if(state==STATE2){
+
+        P1->OUT &= (uint8_t)(~(1<<0));
+        P2->OUT |= (uint8_t)(1<<2);
+        state=STATE1;
+
+    }else if(state==STATE1){
+
+        P1->OUT &= (uint8_t)(~(1<<0));
+        P2->OUT &= (uint8_t)(~(1<<2));
+        state=STATE0;
+
+    }
+
+
+}
 
 
 
